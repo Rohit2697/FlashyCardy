@@ -10,7 +10,8 @@ Every data access must be scoped to the currently authenticated Clerk user. A us
 
 - Use Clerk as the only auth provider for user identity in app code.
 - Resolve the current user from Clerk on every protected request/action.
-- Deny access when no authenticated Clerk user is present.
+- For protected pages/routes that require login, redirect unauthenticated users to the homepage (`/`) instead of showing protected content.
+- For protected APIs/actions, deny access when no authenticated Clerk user is present.
 - Treat `decks.userId` as the ownership field and always filter by it for deck-level operations.
 - For card operations, enforce ownership through the parent deck (`cards.deckId -> decks.id -> decks.userId`).
 - On create operations, persist ownership using the authenticated Clerk user id.
@@ -38,5 +39,6 @@ Every data access must be scoped to the currently authenticated Clerk user. A us
 ## Implementation Notes
 
 - Prefer a shared server utility that returns the authenticated Clerk user id and throws on unauthenticated requests.
+- In page-level guards and middleware for protected UI routes, use a homepage redirect (`redirect("/")`) for unauthenticated users.
 - Keep ownership checks close to query construction so accidental unscoped queries are avoided.
 - Add tests for cross-user access attempts to ensure forbidden access is blocked.

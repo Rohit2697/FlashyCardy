@@ -41,11 +41,21 @@ export default function RootLayout({
             </h1>
             <div className="flex items-center gap-3">
               <Show when="signed-out">
-                <SignInButton mode="modal" appearance={{ theme: dark }}>
-                  <Button variant="outline">Sign in</Button>
+                <SignInButton
+                  mode="modal"
+                  appearance={{ theme: dark }}
+                  forceRedirectUrl="/dashboard"
+                  fallbackRedirectUrl="/dashboard"
+                >
+                  <Button variant="outline">Sign In</Button>
                 </SignInButton>
-                <SignUpButton mode="modal" appearance={{ theme: dark }}>
-                  <Button>Sign up</Button>
+                <SignUpButton
+                  mode="modal"
+                  appearance={{ theme: dark }}
+                  forceRedirectUrl="/dashboard"
+                  fallbackRedirectUrl="/dashboard"
+                >
+                  <Button>Sign Up</Button>
                 </SignUpButton>
               </Show>
               <Show when="signed-in">
