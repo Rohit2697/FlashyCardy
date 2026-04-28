@@ -1,8 +1,10 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { getDecksWithCardCountByUserId } from "@/db/queries";
+import { revalidatePath } from "next/cache";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { createDeck, getDecksWithCardCountByUserId } from "@/db/queries";
 import {
   Card,
   CardContent,
@@ -10,15 +12,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { CreateDeckButton } from "./create-deck-button";
+import { createDeckInputSchema, type CreateDeckInput } from "./schemas";
+
+const FREE_PLAN_MAX_DECKS = 3;
 
 export default async function DashboardPage() {
-  const { userId } = await auth();
+  const { userId, has } = await auth();
 
   if (!userId) {
     redirect("/");
   }
 
   const { decks, cardCount } = await getDecksWithCardCountByUserId(userId);
+
+  const isProUser = has({ plan: "pro" });
+  const hasReachedLimit = !isProUser && decks.length >= FREE_PLAN_MAX_DECKS;
 
   const stats = [
     { label: "Decks Active", value: decks.length.toString() },
@@ -35,20 +44,84 @@ export default async function DashboardPage() {
     year: "numeric",
   });
 
+  async function createDeckAction(input: CreateDeckInput): Promise<number> {
+    "use server";
+
+    const parsed = createDeckInputSchema.parse(input);
+    const { userId: actionUserId, has: actionHas } = await auth();
+
+    if (!actionUserId) {
+      throw new Error("You must be signed in to create a deck.");
+    }
+
+    // Server-side guard: enforce deck limit for free users
+    const actionIsProUser = actionHas({ plan: "pro" });
+    if (!actionIsProUser) {
+      const { decks: currentDecks } =
+        await getDecksWithCardCountByUserId(actionUserId);
+      if (currentDecks.length >= FREE_PLAN_MAX_DECKS) {
+        throw new Error(
+          `Free plan is limited to ${FREE_PLAN_MAX_DECKS} decks. Please upgrade to Pro for unlimited decks.`,
+        );
+      }
+    }
+
+    const deck = await createDeck(
+      actionUserId,
+      parsed.title,
+      parsed.description,
+    );
+
+    revalidatePath("/dashboard");
+
+    return deck.id;
+  }
+
   return (
     <main className="flex min-h-screen w-full bg-background px-6 py-10">
       <section className="mx-auto flex w-full max-w-5xl flex-col gap-8">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-1">
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight text-foreground">
               Dashboard
+              {isProUser && (
+                <span className="inline-flex items-center rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 px-2.5 py-0.5 text-xs font-semibold text-white shadow-sm">
+                  PRO
+                </span>
+              )}
             </h1>
             <p className="text-sm text-muted-foreground">
               Track your learning progress and jump back into study mode.
             </p>
           </div>
-          <Button>Create New Deck</Button>
+          <CreateDeckButton
+            createDeckAction={createDeckAction}
+            hasReachedLimit={hasReachedLimit}
+            currentDeckCount={decks.length}
+            maxDecks={FREE_PLAN_MAX_DECKS}
+          />
         </header>
+
+        {/* Deck limit banner for free users */}
+        {!isProUser && (
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+            <p className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">
+                {decks.length}
+              </span>{" "}
+              / {FREE_PLAN_MAX_DECKS} decks used on the Free plan.
+              {hasReachedLimit
+                ? " You've hit your limit — upgrade to create more."
+                : ` ${FREE_PLAN_MAX_DECKS - decks.length} remaining.`}
+            </p>
+            <Link
+              href="/pricing"
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+            >
+              Upgrade
+            </Link>
+          </div>
+        )}
 
         <section className="grid gap-4 md:grid-cols-3">
           {stats.map((stat) => (
